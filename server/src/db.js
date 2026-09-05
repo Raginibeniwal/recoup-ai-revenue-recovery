@@ -204,6 +204,16 @@ export function getPromisesByInvoice(invoiceId) {
   return queryAll('SELECT * FROM promises_to_pay WHERE invoice_id = ?', [invoiceId]);
 }
 
+export function getAllPromises() {
+  return queryAll(`
+    SELECT p.*, i.invoice_number, c.company_name
+    FROM promises_to_pay p
+    JOIN invoices i ON p.invoice_id = i.invoice_id
+    JOIN customers c ON i.customer_id = c.customer_id
+    ORDER BY p.created_at DESC
+  `);
+}
+
 export function getRecoveryAttempts(invoiceId) {
   return queryAll('SELECT * FROM recovery_attempts WHERE invoice_id = ? ORDER BY timestamp ASC', [invoiceId]);
 }

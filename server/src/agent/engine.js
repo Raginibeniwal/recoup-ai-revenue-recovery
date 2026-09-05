@@ -32,6 +32,72 @@ const DIAGNOSES = {
   ANOMALOUS_PAYMENT_BEHAVIOR: 'ANOMALOUS_PAYMENT_BEHAVIOR'
 };
 
+export const ACTION_LABELS = {
+  SEND_FRIENDLY_REMINDER: 'Send friendly payment reminder',
+  SEND_PERSONALIZED_FOLLOWUP: 'Send personalized follow-up',
+  SEND_PAYMENT_LINK: 'Send instant payment link',
+  RECORD_PROMISE_TO_PAY: 'Record promise to pay',
+  FOLLOW_UP_ON_PROMISE: 'Follow up on payment promise',
+  ESCALATE_TO_FINANCE: 'Escalate to Finance team',
+  ESCALATE_TO_ACCOUNT_MANAGER: 'Escalate to Account Manager',
+  STOP_AUTOMATED_RECOVERY: 'Stop automated recovery'
+};
+
+export const DIAGNOSIS_LABELS = {
+  RECENTLY_OVERDUE: 'Recently overdue invoice',
+  RELIABLE_CUSTOMER: 'Reliable customer with minor delay',
+  CHRONIC_LATE_PAYER: 'Chronic late paying customer',
+  HIGH_VALUE_ACCOUNT: 'High-value account exposure',
+  PAYMENT_PROMISE_ACTIVE: 'Active promise to pay',
+  PROMISE_BROKEN: 'Broken promise to pay',
+  DISPUTED_INVOICE: 'Disputed invoice',
+  REPEATED_CONTACT_NO_RESPONSE: 'Repeated contact with no response',
+  SEVERELY_OVERDUE: 'Severely overdue debt (>90 days)',
+  LOW_RECOVERY_PROBABILITY: 'Low recovery probability',
+  ANOMALOUS_PAYMENT_BEHAVIOR: 'Anomalous payment delay'
+};
+
+function buildHumanReasons(context, diagnosis, probability, rules) {
+  const { customer, invoice, attempts } = context;
+  const reasons = [];
+
+  if (customer.payment_reliability >= 0.8) {
+    reasons.push('✓ Customer usually pays reliably');
+  } else if (customer.payment_reliability < 0.5) {
+    reasons.push('⚠️ Customer has history of payment delays');
+  }
+
+  if (invoice.days_overdue <= 15) {
+    reasons.push(`✓ Invoice is only ${invoice.days_overdue} days overdue`);
+  } else if (invoice.days_overdue > 60) {
+    reasons.push(`⚠️ Invoice is severely overdue (${invoice.days_overdue} days)`);
+  } else {
+    reasons.push(`• Invoice is ${invoice.days_overdue} days past due`);
+  }
+
+  if (invoice.dispute_flag === 1) {
+    reasons.push('⚠️ Customer has an active dispute on this invoice');
+  } else {
+    reasons.push('✓ No active billing dispute');
+  }
+
+  if (attempts.length === 0) {
+    reasons.push('✓ No previous automated attempts');
+  } else if (attempts.length >= MAX_AUTOMATED_ATTEMPTS) {
+    reasons.push(`⚠️ Reached max automated contacts (${attempts.length} attempts)`);
+  } else {
+    reasons.push(`• ${attempts.length} previous reminder(s) sent`);
+  }
+
+  if (rules.requiresHuman) {
+    reasons.push('👤 Human review required');
+  } else if (rules.canAutomate) {
+    reasons.push('🤖 Safe for automated recovery');
+  }
+
+  return reasons;
+}
+
 // ── Core Engine Methods ─────────────────────────────────────────────────────
 
 export function decide(invoiceId) {
@@ -61,18 +127,22 @@ export function decide(invoiceId) {
 
   // 5. Select Action
   const recommendedAction = selectAction(diagnosis, rules);
+  const humanReasons = buildHumanReasons(context, diagnosis, recoveryProbability, rules);
 
   return {
     invoiceId,
     diagnosis,
+    diagnosisLabel: DIAGNOSIS_LABELS[diagnosis] || diagnosis,
     recoveryProbability: Number(recoveryProbability.toFixed(2)),
     expectedRecoveryValue: Number(expectedRecoveryValue.toFixed(2)),
     priorityScore: Number(priorityScore.toFixed(2)),
     priorityLevel,
     recommendedAction,
+    actionLabel: ACTION_LABELS[recommendedAction] || recommendedAction,
     canAutomate: rules.canAutomate,
     requiresHuman: rules.requiresHuman,
     stopReason: rules.stopReason,
+    humanReasons,
     decisionFactors: factors
   };
 }
