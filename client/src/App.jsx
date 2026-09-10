@@ -26,11 +26,10 @@ export default function App() {
   const [personalData, setPersonalData] = useState(null);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [dataSource, setDataSource] = useState('empty'); // 'empty' | 'real' | 'demo' | 'mixed'
 
-  // Status & Loader States
+  // Status States
   const [serverStatus, setServerStatus] = useState('online');
-  const [runningAgent, setRunningAgent] = useState(false);
-  const [generatingBatch, setGeneratingBatch] = useState(false);
   const [toast, setToast] = useState(null);
 
   // Persist session choices
@@ -42,7 +41,7 @@ export default function App() {
     localStorage.setItem('recoup_mode', mode);
   }, [mode]);
 
-  // Load data on start & mode change
+  // Load data when entering dashboard
   useEffect(() => {
     if (page === 'dashboard') {
       refreshData();
@@ -61,7 +60,10 @@ export default function App() {
           api.getDashboardSummary().catch(() => null),
           api.getCases().catch(() => [])
         ]);
-        if (sumRes) setSummary(sumRes);
+        if (sumRes) {
+          setSummary(sumRes);
+          setDataSource(sumRes.dataSource || (sumRes.hasData ? 'real' : 'empty'));
+        }
         if (casesRes) setCases(casesRes);
         setServerStatus('online');
       } else {
@@ -78,52 +80,39 @@ export default function App() {
 
   const handleStartDemo = (selectedMode = 'business') => {
     setMode(selectedMode);
-    setPage('dashboard');
-    setActiveTab('overview');
+    setPage('login');
   };
 
   const handleLogin = (selectedMode) => {
     setMode(selectedMode);
     setPage('dashboard');
     setActiveTab('overview');
-    showToast('success', `Logged in as ${selectedMode === 'business' ? 'Enterprise Business' : 'Personal User'}`);
+    showToast('success', `Welcome! You are now in ${selectedMode === 'business' ? 'Business' : 'Personal'} mode.`);
   };
 
   const handleLogout = () => {
     setPage('landing');
-    showToast('info', 'Logged out of Recoup session');
+    setSummary(null);
+    setCases([]);
+    setPersonalData(null);
+    showToast('info', 'Logged out of Recoup session.');
   };
 
-  const handleGenerateBatch = async (count = 400) => {
-    setGeneratingBatch(true);
-    showToast('info', `Generating ${count} synthetic cases...`);
-    try {
-      const res = await api.generateBatch(count);
-      showToast('success', `Generated ${res.totalCases} cases (₹${(res.totalAtRisk / 100000).toFixed(1)}L at risk)`);
-      await refreshData();
-    } catch (err) {
-      showToast('error', err.message);
-      setServerStatus('disconnected');
-    } finally {
-      setGeneratingBatch(false);
-    }
+  /**
+   * Called after a payment is analyzed or CSV is imported.
+   * Refreshes dashboard data so metrics update immediately.
+   */
+  const handlePaymentAdded = async (result) => {
+    showToast('success', result?.imported != null
+      ? `Imported ${result.imported} records. Dashboard updated.`
+      : 'Payment analyzed and saved. Dashboard updated.');
+    await refreshData();
+    // If on data-entry sub-view, optionally switch to metrics
+    // Keep current tab so user can add more payments
   };
 
-  const handleRunAgent = async () => {
-    setRunningAgent(true);
-    showToast('info', 'Running Recoup Recovery Decision Engine across batch...');
-    try {
-      const res = await api.runBatch();
-      showToast('success', `Agent completed! Recovered ${res.recovered} cases (₹${(res.recoveredAmount / 100000).toFixed(1)}L)`);
-      await refreshData();
-    } catch (err) {
-      showToast('error', err.message);
-    } finally {
-      setRunningAgent(false);
-    }
-  };
+  // ── Render Views ─────────────────────────────────────────────────────────────
 
-  // Render Views
   if (page === 'landing') {
     return <LandingPage onStartDemo={handleStartDemo} />;
   }
@@ -133,7 +122,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
+    <div className="min-h-screen bg-stone-50 text-stone-900 font-sans flex flex-col">
+
       {/* Navigation Header */}
       <Navigation
         mode={mode}
@@ -143,33 +133,32 @@ export default function App() {
         }}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onGenerateBatch={handleGenerateBatch}
-        generatingBatch={generatingBatch}
         serverStatus={serverStatus}
+        dataSource={dataSource}
         onOpenAssistant={() => setIsAssistantOpen(true)}
         onLogout={handleLogout}
       />
 
-      {/* Backend Disconnected Warning Banner */}
+      {/* Backend Disconnected Warning */}
       {serverStatus === 'disconnected' && (
-        <div className="bg-rose-950/80 border-b border-rose-800 text-rose-200 px-6 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2">
-          <span>Recoup server is not responding. Ensure the backend server is running on port 3001.</span>
-          <button onClick={refreshData} className="underline text-white hover:text-rose-100">Retry Connection</button>
+        <div className="bg-red-600 text-white px-6 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2">
+          <span>Backend server is not responding. Start the server on port 3001.</span>
+          <button onClick={refreshData} className="underline font-bold hover:no-underline">Retry</button>
         </div>
       )}
 
-      {/* Main Content View Container */}
-      <main className="flex-1 max-w-7xl mx-auto px-6 py-8 w-full">
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl mx-auto px-6 py-6 w-full">
         {mode === 'business' ? (
           <>
             {activeTab === 'overview' && (
               <BusinessDashboard
                 summary={summary}
-                runningAgent={runningAgent}
-                onRunAgent={handleRunAgent}
-                onGenerateBatch={handleGenerateBatch}
+                dataSource={dataSource}
+                onPaymentAdded={handlePaymentAdded}
                 onOpenCase={(id) => setSelectedCaseId(id)}
                 onViewQueue={() => setActiveTab('queue')}
+                onRefresh={refreshData}
               />
             )}
 
@@ -177,6 +166,7 @@ export default function App() {
               <RecoveryQueueEnhanced
                 cases={cases}
                 onSelectCase={(id) => setSelectedCaseId(id)}
+                onRefresh={refreshData}
               />
             )}
 
@@ -195,11 +185,11 @@ export default function App() {
         ) : (
           <>
             {activeTab === 'overview' && (
-              <PersonalDashboard data={personalData} />
+              <PersonalDashboard data={personalData} onRefresh={refreshData} />
             )}
 
             {activeTab === 'bills' && (
-              <PersonalDashboard data={personalData} />
+              <PersonalDashboard data={personalData} onRefresh={refreshData} />
             )}
 
             {activeTab === 'health' && (
@@ -210,8 +200,8 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        RECOUP Revenue Recovery & Financial Health Platform &copy; 2026. Educational Prototype.
+      <footer className="border-t border-stone-200 py-4 text-center text-xs text-stone-400 bg-white">
+        RECOUP Revenue Recovery & Financial Health Platform © 2026 · Educational Prototype
       </footer>
 
       {/* Case Detail Modal */}
@@ -223,13 +213,13 @@ export default function App() {
         />
       )}
 
-      {/* Recoup AI Assistant Slide-over Drawer */}
+      {/* Recoup AI Assistant */}
       <RecoupAssistant
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
       />
 
-      {/* Global Toast Feedback */}
+      {/* Global Toast */}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

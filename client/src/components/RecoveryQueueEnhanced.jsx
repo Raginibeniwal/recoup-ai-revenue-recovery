@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
-import { Search, Filter, ShieldCheck, AlertTriangle, Bot, UserCheck, CheckCircle2, XCircle, ArrowUpDown } from 'lucide-react';
+import { Search, Filter, ShieldCheck, AlertTriangle, Bot, UserCheck, CheckCircle2, XCircle, ArrowUpDown, Trash2 } from 'lucide-react';
+import api from '../services/api';
 
-export default function RecoveryQueueEnhanced({ cases, onSelectCase }) {
+export default function RecoveryQueueEnhanced({ cases, onSelectCase, onRefresh }) {
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('erv');
+  const [deletingId, setDeletingId] = useState(null);
 
   if (!cases || cases.length === 0) {
     return (
-      <div className="p-8 bg-slate-900 rounded-3xl border border-slate-800 text-center text-slate-400 text-sm">
-        No active cases in queue. Generate demo data to populate recovery cases.
+      <div className="p-12 bg-white border border-stone-200 rounded-2xl text-center space-y-4 shadow-sm">
+        <div className="w-12 h-12 mx-auto rounded-xl bg-stone-100 flex items-center justify-center">
+          <Filter className="w-6 h-6 text-stone-400" />
+        </div>
+        <div>
+          <h3 className="font-bold text-stone-700">No payment records yet</h3>
+          <p className="text-stone-400 text-sm mt-1">
+            Add your first payment using "Add Payment / Revenue Data" in the Overview tab,
+            or upload a CSV file to populate this queue.
+          </p>
+        </div>
       </div>
     );
   }
@@ -39,6 +50,21 @@ export default function RecoveryQueueEnhanced({ cases, onSelectCase }) {
     if (sortField === 'overdue') return b.days_overdue - a.days_overdue;
     return 0;
   });
+
+  const handleDelete = async (e, caseId) => {
+    e.stopPropagation(); // Don't open the case detail modal
+    if (!window.confirm('Remove this invoice from your records? This cannot be undone.')) return;
+    setDeletingId(caseId);
+    try {
+      await api.deleteInvoice(caseId);
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete invoice: ' + err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const getStatusBadge = (status, requiresHuman) => {
     if (status === 'recovered') {
@@ -114,6 +140,7 @@ export default function RecoveryQueueEnhanced({ cases, onSelectCase }) {
               <th className="px-6 py-3.5">Autonomy</th>
               <th className="px-6 py-3.5">Recommended Action</th>
               <th className="px-6 py-3.5">Status</th>
+              <th className="px-3 py-3.5 w-10" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-850 text-xs">
@@ -168,6 +195,16 @@ export default function RecoveryQueueEnhanced({ cases, onSelectCase }) {
 
                 <td className="px-6 py-4">
                   {getStatusBadge(c.status, c.requires_human)}
+                </td>
+                <td className="px-3 py-4" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={(e) => handleDelete(e, c.case_id)}
+                    disabled={deletingId === c.case_id}
+                    className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                    title="Delete this record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </td>
               </tr>
             ))}

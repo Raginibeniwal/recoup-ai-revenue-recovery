@@ -152,7 +152,7 @@ function createSpecialCases(batchId) {
 
 // ── Public: Generate full batch ──────────────────────────────────────────────
 
-export function generateBatch(invoiceCount = 400) {
+export function generateBatch(invoiceCount = 400, dataSource = 'demo') {
   const db = getDb();
   const batchId = uuidv4();
   const now = new Date().toISOString();
@@ -179,6 +179,9 @@ export function generateBatch(invoiceCount = 400) {
     const c = pick(allCustomers);
     allInvoices.push(createInvoice(c.customer_id, batchId));
   }
+
+  // Tag all invoices with the provided data_source ('demo' by default)
+  allInvoices.forEach(inv => { inv.data_source = dataSource; });
 
   const totalAtRisk = allInvoices.reduce((s, i) => s + i.amount, 0);
 

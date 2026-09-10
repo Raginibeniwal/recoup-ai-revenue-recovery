@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { X, Bot, Send, Sparkles, User } from 'lucide-react';
+import { X, Bot, Send, Sparkles, User, Database, TrendingUp, HelpCircle } from 'lucide-react';
 import api from '../services/api';
 
 export default function RecoupAssistant({ isOpen, onClose }) {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: 'Hello! I am Recoup Assistant. I can help analyze your revenue risks, prioritize recovery actions, and explain financial health changes.',
+      text: 'Hello! I am Recoup Assistant. I only use information actually stored in your database — I will clearly tell you what I know, what I infer, and what I cannot determine.',
       actionTip: 'Select a question below or type your query.'
     }
   ]);
@@ -16,10 +16,10 @@ export default function RecoupAssistant({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const quickQuestions = [
-    'What needs attention?',
-    'Why is my score changing?',
     'What should I recover first?',
-    'How can I improve payment health?'
+    'How much revenue is at risk?',
+    'Why is my score changing?',
+    'Do I have any disputed invoices?'
   ];
 
   const handleSend = async (questionText) => {
@@ -36,7 +36,10 @@ export default function RecoupAssistant({ isOpen, onClose }) {
       const botMsg = {
         sender: 'bot',
         text: res.reply,
-        actionTip: res.actionTip
+        actionTip: res.actionTip,
+        knownFacts: res.knownFacts || [],
+        inferences: res.inferences || [],
+        unknowns: res.unknowns || []
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
@@ -61,10 +64,10 @@ export default function RecoupAssistant({ isOpen, onClose }) {
             </div>
             <div>
               <h3 className="font-bold text-white text-base">Recoup Assistant</h3>
-              <p className="text-[11px] text-slate-400">Rule-based financial recovery copilot</p>
+              <p className="text-[11px] text-slate-400">Rule-based · only uses your actual data</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -82,24 +85,81 @@ export default function RecoupAssistant({ isOpen, onClose }) {
                 {m.sender === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
               </div>
 
-              <div className={`p-4 rounded-2xl max-w-[85%] text-xs leading-relaxed space-y-2 ${
+              <div className={`rounded-2xl max-w-[85%] text-xs leading-relaxed overflow-hidden ${
                 m.sender === 'user'
-                  ? 'bg-teal-500 text-slate-950 font-medium rounded-tr-none'
-                  : 'bg-slate-950 border border-slate-850 text-slate-200 rounded-tl-none'
+                  ? 'bg-teal-500 text-slate-950 font-medium rounded-tr-none p-4'
+                  : 'bg-slate-950 border border-slate-800/80 text-slate-200 rounded-tl-none'
               }`}>
-                <div>{m.text}</div>
-                {m.actionTip && (
-                  <div className="pt-2 border-t border-slate-800/80 text-[11px] text-teal-400 font-semibold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> {m.actionTip}
-                  </div>
+                {m.sender === 'user' ? (
+                  <div>{m.text}</div>
+                ) : (
+                  <>
+                    {/* Main reply text */}
+                    <div className="p-4 pb-2">{m.text}</div>
+
+                    {/* Structured sections — only shown on bot messages that have them */}
+                    {(m.knownFacts?.length > 0 || m.inferences?.length > 0 || m.unknowns?.length > 0) && (
+                      <div className="border-t border-slate-800/80 divide-y divide-slate-800/60">
+
+                        {/* KNOWN DATA */}
+                        {m.knownFacts?.length > 0 && (
+                          <div className="px-4 py-2.5 space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                              <Database className="w-3 h-3" /> Known Data
+                            </div>
+                            {m.knownFacts.map((f, i) => (
+                              <div key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                                <span className="text-emerald-500 mt-0.5">✓</span> {f}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* INFERRED ANALYSIS */}
+                        {m.inferences?.length > 0 && (
+                          <div className="px-4 py-2.5 space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal-400 uppercase tracking-wider">
+                              <TrendingUp className="w-3 h-3" /> Inferred Analysis
+                            </div>
+                            {m.inferences.map((f, i) => (
+                              <div key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                                <span className="text-teal-500 mt-0.5">→</span> {f}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* UNKNOWN */}
+                        {m.unknowns?.length > 0 && (
+                          <div className="px-4 py-2.5 space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              <HelpCircle className="w-3 h-3" /> Cannot Determine
+                            </div>
+                            {m.unknowns.map((f, i) => (
+                              <div key={i} className="text-[11px] text-slate-500 flex items-start gap-1.5">
+                                <span className="mt-0.5">–</span> {f}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action tip */}
+                    {m.actionTip && (
+                      <div className="px-4 py-2.5 border-t border-slate-800/80 text-[11px] text-teal-400 font-semibold flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> {m.actionTip}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           ))}
 
           {loading && (
-            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-              <Bot className="w-4 h-4 animate-spin text-teal-400" /> Thinking...
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono pl-10">
+              <Bot className="w-4 h-4 animate-spin text-teal-400" /> Analyzing your data…
             </div>
           )}
         </div>

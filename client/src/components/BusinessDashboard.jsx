@@ -1,15 +1,32 @@
-import React from 'react';
-import { ShieldAlert, IndianRupee, Activity, AlertTriangle, ArrowUpRight, Play, CheckCircle2, ShieldCheck, TrendingUp, Sparkles, Bot, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  ShieldAlert, IndianRupee, Activity, AlertTriangle, ArrowUpRight,
+  CheckCircle2, ShieldCheck, TrendingUp, Clock, BarChart3,
+  Target, PlusCircle, FileSpreadsheet, HelpCircle, Database, Loader2
+} from 'lucide-react';
+import AddPaymentForm from './AddPaymentForm';
+import CSVUploadPanel from './CSVUploadPanel';
 import ComparisonChart from './ComparisonChart';
+import api from '../services/api';
 
-export default function BusinessDashboard({
-  summary,
-  runningAgent,
-  onRunAgent,
-  onGenerateBatch,
-  onOpenCase,
-  onViewQueue
-}) {
+function Tooltip({ text, children }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-52 bg-stone-800 text-white text-[11px] rounded-lg p-2.5 z-20 shadow-xl text-center">
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+export default function BusinessDashboard({ summary, dataSource, onPaymentAdded, onOpenCase, onViewQueue, onRefresh }) {
+  const [activeView, setActiveView] = useState('data-entry'); // 'data-entry' | 'metrics'
+  const [loadingDemo, setLoadingDemo] = useState(false);
+
   const formatCurrency = (val) => {
     if (val == null) return '₹0';
     if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)}Cr`;
@@ -17,202 +34,95 @@ export default function BusinessDashboard({
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
   };
 
-  if (!summary || !summary.hasBatch) {
-    return (
-      <div className="p-12 bg-slate-900 rounded-3xl border border-slate-800 text-center space-y-6 max-w-2xl mx-auto my-12 shadow-2xl">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/20">
-          <Sparkles className="w-8 h-8" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-white">No active dataset loaded</h2>
-          <p className="text-slate-400 text-sm max-w-md mx-auto">
-            Generate synthetic B2B invoices, customer histories, and payment risks to explore Recoup's Intelligent Revenue Recovery engine.
-          </p>
-        </div>
-        <button
-          onClick={() => onGenerateBatch(400)}
-          className="px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-teal-500/20 hover:brightness-110 transition-all inline-flex items-center gap-2"
-        >
-          <Sparkles className="w-4 h-4" /> Generate Demo Data
-        </button>
-      </div>
-    );
-  }
+  const hasData = summary && summary.hasData;
 
-  const {
-    revenueAtRisk,
-    recoverableNow,
-    agentRecovered,
-    overduePaymentsCount,
-    recoveryRate,
-    financialHealthScore,
-    financialHealthLabel,
-    riskBreakdown,
-    recommendations
-  } = summary;
+  const handleLoadSampleData = async () => {
+    setLoadingDemo(true);
+    try {
+      await api.loadSampleData(15);
+      if (onRefresh) await onRefresh();
+    } catch (e) {
+      console.error('Failed to load sample data', e);
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
 
   return (
-    <div className="space-y-8 font-sans">
-      
-      {/* Executive Assistant Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-3xl p-8 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="space-y-6 font-sans">
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+      {/* Welcome Banner */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-              Good evening 👋
+            <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">
+              Revenue Recovery Dashboard
             </h1>
-            <p className="text-slate-400 text-base mt-1">
-              Here's what needs your financial attention today.
+            <p className="text-stone-500 text-sm mt-1">
+              {hasData
+                ? `Tracking ${summary.totalCases} invoice${summary.totalCases !== 1 ? 's' : ''} · ${formatCurrency(summary.revenueAtRisk)} at risk`
+                : 'Add your first payment record to begin recovery analysis.'}
             </p>
           </div>
 
-          {/* Core Action: Run Agent */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={onRunAgent}
-              disabled={runningAgent}
-              className="px-6 py-3.5 bg-gradient-to-r from-teal-500 via-emerald-400 to-teal-500 text-slate-950 font-bold text-sm rounded-2xl shadow-xl shadow-teal-500/25 hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2"
-            >
-              {runningAgent ? (
-                <>
-                  <Activity className="w-4 h-4 animate-spin" />
-                  <span>Analyzing & Recovering...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-slate-950" />
-                  <span>Analyse & Run Recovery Agent</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+            {/* Data Source Badge (visible when there is data) */}
+            {hasData && dataSource && dataSource !== 'empty' && (
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border ${
+                dataSource === 'real'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : dataSource === 'demo'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                <Database className="w-3 h-3" />
+                {dataSource === 'real' ? 'Based on your data' : dataSource === 'demo' ? 'Sample dataset' : 'Mixed data'}
+              </div>
+            )}
 
-      {/* Top 5 Executive Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        
-        <MetricCard
-          title="Revenue at Risk"
-          value={formatCurrency(revenueAtRisk)}
-          subtext="Total unpaid invoices"
-          icon={<ShieldAlert className="w-5 h-5 text-rose-400" />}
-          accentColor="rose"
-        />
-
-        <MetricCard
-          title="Recoverable Now"
-          value={formatCurrency(recoverableNow)}
-          subtext="High recovery probability"
-          icon={<IndianRupee className="w-5 h-5 text-teal-400" />}
-          accentColor="teal"
-        />
-
-        <MetricCard
-          title="Overdue Payments"
-          value={overduePaymentsCount}
-          subtext="Active overdue invoices"
-          icon={<Clock className="w-5 h-5 text-amber-400" />}
-          accentColor="amber"
-        />
-
-        <MetricCard
-          title="Recovery Rate"
-          value={`${(recoveryRate * 100).toFixed(1)}%`}
-          subtext={`Recovered ${formatCurrency(agentRecovered)}`}
-          icon={<TrendingUp className="w-5 h-5 text-emerald-400" />}
-          accentColor="emerald"
-        />
-
-        <MetricCard
-          title="Financial Health"
-          value={`${financialHealthScore} / 100`}
-          subtext={financialHealthLabel}
-          icon={<ShieldCheck className="w-5 h-5 text-sky-400" />}
-          accentColor="sky"
-        />
-
-      </div>
-
-      {/* "WHAT'S HAPPENING?" Section */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-        <div>
-          <h2 className="text-xs uppercase tracking-widest text-teal-400 font-semibold mb-1">Risk Factor Breakdown</h2>
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            Why is <span className="text-rose-400 font-mono">{formatCurrency(revenueAtRisk)}</span> at risk?
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <RiskFactorCard
-            color="rose"
-            icon="🔴"
-            title={`${riskBreakdown?.highRiskInvoices || 0} High-risk Invoices`}
-            description="Invoices overdue >60 days or with critically low recovery chance."
-          />
-          <RiskFactorCard
-            color="amber"
-            icon="🟠"
-            title={`${riskBreakdown?.latePayingCustomers || 0} Late-paying Customers`}
-            description="Customers with historical pattern of delayed payments."
-          />
-          <RiskFactorCard
-            color="yellow"
-            icon="🟡"
-            title={`${riskBreakdown?.paymentFailures || 0} Payment Failures`}
-            description="Repeated automated reminder attempts without customer response."
-          />
-          <RiskFactorCard
-            color="sky"
-            icon="🔵"
-            title={`${riskBreakdown?.customerDisputes || 0} Customer Disputes`}
-            description="Active billing disputes requiring human finance intervention."
-          />
-        </div>
-      </div>
-
-      {/* "WHAT SHOULD YOU DO?" Action Recommendations */}
-      {recommendations && recommendations.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-teal-400 font-semibold mb-1">Recoup Priority Engine</h2>
-              <h3 className="text-xl font-bold text-white">What should you do next?</h3>
+            {/* View Toggle */}
+            <div className="flex items-center gap-1 bg-stone-100 rounded-xl p-1">
+              <button
+                onClick={() => setActiveView('data-entry')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                  activeView === 'data-entry'
+                    ? 'bg-white text-stone-900 shadow-sm'
+                    : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                <PlusCircle className="w-4 h-4" /> Add Data
+              </button>
+              <button
+                onClick={() => setActiveView('metrics')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                  activeView === 'metrics'
+                    ? 'bg-white text-stone-900 shadow-sm'
+                    : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" /> Dashboard Metrics
+              </button>
             </div>
-            <button
-              onClick={onViewQueue}
-              className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1"
-            >
-              View All In Queue <ArrowUpRight className="w-4 h-4" />
-            </button>
           </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {recommendations.map((rec, idx) => (
-              <div key={idx} className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-400">{rec.companyName} ({rec.invoiceNumber})</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      rec.urgency === 'High' ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                    }`}>
-                      {rec.urgency} Urgency
-                    </span>
-                  </div>
-                  <div className="text-lg font-bold text-white">₹{Number(rec.amount).toLocaleString('en-IN')}</div>
-                  <p className="text-xs text-slate-400">Reason: <span className="text-slate-200">{rec.reason}</span></p>
-                </div>
-
-                <div className="pt-2 border-t border-slate-850 flex items-center justify-between">
-                  <div className="text-[11px] text-teal-400 font-medium">{rec.suggestedAction}</div>
-                  <button
-                    onClick={() => onOpenCase(rec.invoiceId)}
-                    className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-semibold border border-teal-500/30 transition-all"
-                  >
-                    Inspect & Act
-                  </button>
+      {/* Workflow Steps Banner — shown when no data */}
+      {!hasData && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
+          <h3 className="font-bold text-indigo-800 text-sm mb-3">How Recoup Works — Your Recovery Workflow</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { step: '1', icon: <PlusCircle className="w-4 h-4" />, title: 'Add Payment Data', desc: 'Enter a failed invoice manually or upload a CSV' },
+              { step: '2', icon: <Activity className="w-4 h-4" />, title: 'AI Analysis', desc: 'System analyzes failure reason & recovery probability' },
+              { step: '3', icon: <BarChart3 className="w-4 h-4" />, title: 'Dashboard Updates', desc: 'Metrics, charts, and priority queue refresh instantly' },
+              { step: '4', icon: <Target className="w-4 h-4" />, title: 'Take Action', desc: 'Follow recommended recovery actions per case' },
+            ].map(s => (
+              <div key={s.step} className="flex items-start gap-2.5 p-3 bg-white rounded-xl border border-indigo-100">
+                <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0">{s.step}</div>
+                <div>
+                  <div className="text-indigo-800 mb-0.5 flex items-center gap-1">{s.icon}<span className="font-bold text-xs">{s.title}</span></div>
+                  <p className="text-[11px] text-indigo-600">{s.desc}</p>
                 </div>
               </div>
             ))}
@@ -220,38 +130,223 @@ export default function BusinessDashboard({
         </div>
       )}
 
-      {/* Comparison Chart Component */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
-        <ComparisonChart />
-      </div>
-
-    </div>
-  );
-}
-
-function MetricCard({ title, value, subtext, icon, accentColor }) {
-  return (
-    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-3 shadow-lg hover:border-slate-750 transition-colors">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-400">{title}</span>
-        <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-          {icon}
+      {/* DATA ENTRY VIEW */}
+      {activeView === 'data-entry' && (
+        <div className="space-y-4">
+          <AddPaymentForm onPaymentAdded={onPaymentAdded} />
+          <CSVUploadPanel onImportComplete={onPaymentAdded} />
         </div>
-      </div>
-      <div>
-        <div className="text-2xl font-black text-white tracking-tight">{value}</div>
-        <div className="text-xs text-slate-400 mt-0.5">{subtext}</div>
-      </div>
+      )}
+
+      {/* METRICS VIEW */}
+      {activeView === 'metrics' && (
+        <>
+          {!hasData ? (
+            <div className="bg-white border border-stone-200 rounded-2xl p-10 text-center space-y-6">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-stone-100 flex items-center justify-center">
+                <BarChart3 className="w-8 h-8 text-stone-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-stone-700 text-lg">Your financial dashboard is waiting for data</h3>
+                <p className="text-stone-400 text-sm mt-1">
+                  Add your first financial record or upload a CSV to begin.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={() => setActiveView('data-entry')}
+                  className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all inline-flex items-center gap-2 shadow-sm"
+                >
+                  <PlusCircle className="w-4 h-4" /> Add Manually
+                </button>
+                <button
+                  onClick={() => { setActiveView('data-entry'); }}
+                  className="px-6 py-3 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 transition-all inline-flex items-center gap-2 shadow-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4" /> Upload CSV
+                </button>
+              </div>
+              <p className="text-xs text-stone-400">
+                Need to explore first?{' '}
+                <button
+                  onClick={handleLoadSampleData}
+                  disabled={loadingDemo}
+                  className="text-stone-500 underline hover:no-underline hover:text-stone-700 transition-colors disabled:opacity-50"
+                >
+                  {loadingDemo ? 'Loading…' : 'Load sample data'}
+                </button>
+                {' '}— clearly labeled as sample data.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Metric Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MetricCard
+                  title="Revenue at Risk"
+                  tooltip="Total value of all unpaid or failed invoices — money you haven't collected yet."
+                  value={formatCurrency(summary.revenueAtRisk)}
+                  subtext="Unpaid invoices"
+                  icon={<ShieldAlert className="w-4 h-4 text-red-500" />}
+                  valueColor="text-red-700"
+                />
+                <MetricCard
+                  title="Recoverable Revenue"
+                  tooltip="Expected Recoverable Revenue (ERR): sum of (invoice amount × recovery probability) for each case."
+                  value={formatCurrency(summary.recoverableRevenue || summary.recoverableNow)}
+                  subtext="Based on AI probability"
+                  icon={<IndianRupee className="w-4 h-4 text-indigo-600" />}
+                  valueColor="text-indigo-700"
+                />
+                <MetricCard
+                  title="Recovered Revenue"
+                  tooltip="Amount actually recovered (invoices marked as paid/recovered). Starts at ₹0 until payments are confirmed."
+                  value={formatCurrency(summary.recoveredRevenue || summary.agentRecovered || 0)}
+                  subtext="Confirmed payments"
+                  icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                  valueColor="text-emerald-700"
+                />
+                <MetricCard
+                  title="Recovery Rate"
+                  tooltip="Recovery Rate = Recovered Amount ÷ Total At-Risk Amount. Shows how much of at-risk revenue has been collected."
+                  value={`${((summary.recoveryRate || 0) * 100).toFixed(1)}%`}
+                  subtext={summary.recoveryRate > 0 ? 'Improving' : 'No recoveries yet'}
+                  icon={<TrendingUp className="w-4 h-4 text-teal-600" />}
+                  valueColor="text-teal-700"
+                />
+                <MetricCard
+                  title="Failed Invoices"
+                  tooltip="Number of invoices that have not been paid (active/overdue/failed status)."
+                  value={summary.failedCount || summary.overduePaymentsCount || 0}
+                  subtext="Need attention"
+                  icon={<AlertTriangle className="w-4 h-4 text-amber-600" />}
+                  valueColor="text-amber-700"
+                />
+                <MetricCard
+                  title="High Priority"
+                  tooltip="Cases flagged HIGH priority — large invoice amount, high recovery chance, or reliable customer."
+                  value={summary.highPriorityCases || 0}
+                  subtext="Priority cases"
+                  icon={<Target className="w-4 h-4 text-rose-600" />}
+                  valueColor="text-rose-700"
+                />
+              </div>
+
+              {/* Financial Health Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3 shadow-sm">
+                  <div>
+                    <h3 className="font-bold text-stone-800 text-sm">Financial Health Indicators</h3>
+                    <p className="text-xs text-stone-400">Based on your actual payment data</p>
+                  </div>
+                  <div className="space-y-2">
+                    <HealthRow label="Financial Health Score" value={summary.financialHealthScore} badge={summary.financialHealthLabel} />
+                    <HealthRow label="Avg Days Overdue" value={summary.avgDaysOverdue || 0} unit=" days" isNumber />
+                    <HealthRow label="Customer Disputes" value={summary.riskBreakdown?.customerDisputes || 0} isNumber />
+                    <HealthRow label="High-Risk Cases" value={summary.riskBreakdown?.highRiskInvoices || 0} isNumber />
+                  </div>
+                </div>
+
+                <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-bold text-stone-800 text-sm">Top Priority Cases</h3>
+                      <p className="text-xs text-stone-400">Highest expected recovery value first</p>
+                    </div>
+                    <button
+                      onClick={onViewQueue}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                    >
+                      View All <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {summary.recommendations && summary.recommendations.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {summary.recommendations.slice(0, 3).map((rec, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => onOpenCase(rec.invoiceId)}
+                          className="flex items-center justify-between p-3 rounded-xl border border-stone-100 hover:border-indigo-200 hover:bg-indigo-50/50 cursor-pointer transition-all group"
+                        >
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="font-semibold text-stone-800 text-xs truncate group-hover:text-indigo-700">{rec.companyName}</div>
+                            <div className="text-[11px] text-stone-400 font-mono">{rec.invoiceNumber}</div>
+                            {rec.failureReason && (
+                              <div className="text-[11px] text-amber-600">{rec.failureReason}</div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0 ml-3">
+                            <div className="font-bold text-stone-800 text-sm">{formatCurrency(rec.amount)}</div>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              rec.urgency === 'High' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                            }`}>{rec.urgency}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-stone-400 text-center py-4">No active cases yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
+                <ComparisonChart />
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-function RiskFactorCard({ icon, title, description }) {
+function MetricCard({ title, tooltip, value, subtext, icon, valueColor = 'text-stone-800' }) {
+  const [showTip, setShowTip] = useState(false);
   return (
-    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-      <div className="text-base">{icon}</div>
-      <h4 className="font-bold text-white text-sm">{title}</h4>
-      <p className="text-xs text-slate-400 leading-relaxed">{description}</p>
+    <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm relative group hover:border-stone-300 transition-all">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-stone-500 leading-tight">{title}</span>
+          {tooltip && (
+            <span
+              className="cursor-help"
+              onMouseEnter={() => setShowTip(true)}
+              onMouseLeave={() => setShowTip(false)}
+            >
+              <HelpCircle className="w-3 h-3 text-stone-300 group-hover:text-stone-400" />
+              {showTip && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full mb-1 w-52 bg-stone-800 text-white text-[10px] rounded-lg p-2 z-20 shadow-xl">
+                  {tooltip}
+                </div>
+              )}
+            </span>
+          )}
+        </div>
+        {icon}
+      </div>
+      <div className={`text-xl font-black ${valueColor} tracking-tight`}>{value}</div>
+      <div className="text-[11px] text-stone-400 mt-0.5">{subtext}</div>
+    </div>
+  );
+}
+
+function HealthRow({ label, value, badge, unit = '', isNumber = false }) {
+  const badgeColor = badge === 'Healthy' ? 'bg-emerald-100 text-emerald-700' : badge === 'Needs Attention' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b border-stone-100 last:border-0">
+      <span className="text-xs text-stone-500">{label}</span>
+      <div className="flex items-center gap-2">
+        {isNumber ? (
+          <span className="text-sm font-bold text-stone-800">{value}{unit}</span>
+        ) : (
+          <span className="text-sm font-bold text-stone-800">{value}{unit}</span>
+        )}
+        {badge && (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeColor}`}>{badge}</span>
+        )}
+      </div>
     </div>
   );
 }

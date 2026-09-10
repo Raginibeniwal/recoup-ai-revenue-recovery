@@ -51,6 +51,9 @@ function initSchema() {
       dispute_flag INTEGER NOT NULL DEFAULT 0,
       true_recovery_probability REAL NOT NULL,
       batch_id TEXT NOT NULL,
+      failure_reason TEXT,
+      payment_method TEXT,
+      data_source TEXT NOT NULL DEFAULT 'real',
       FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
     )
   `);
@@ -126,6 +129,24 @@ function initSchema() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS personal_payments (
+      payment_id TEXT PRIMARY KEY,
+      user_session TEXT NOT NULL DEFAULT 'default',
+      payment_name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      due_date TEXT NOT NULL,
+      payment_date TEXT,
+      payment_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      failure_reason TEXT,
+      monthly_income REAL,
+      monthly_expenses REAL,
+      created_at TEXT NOT NULL,
+      data_source TEXT NOT NULL DEFAULT 'real'
+    )
+  `);
+
   // Indexes
   db.run('CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_invoices_batch ON invoices(batch_id)');
@@ -142,6 +163,37 @@ export function resetDb() {
   d.run('DELETE FROM invoices');
   d.run('DELETE FROM customers');
   d.run('DELETE FROM batch_runs');
+  d.run('DELETE FROM personal_payments');
+}
+
+/**
+ * Returns the overall data source status of the dashboard:
+ * 'empty'  — no invoices
+ * 'real'   — all invoices are user-entered
+ * 'demo'   — all invoices are generated demo data
+ * 'mixed'  — mix of real and demo
+ */
+export function getDashboardDataSource() {
+  const invoices = queryAll('SELECT data_source FROM invoices');
+  if (invoices.length === 0) return 'empty';
+  const hasReal = invoices.some(i => i.data_source === 'real');
+  const hasDemo = invoices.some(i => i.data_source === 'demo');
+  if (hasReal && hasDemo) return 'mixed';
+  if (hasReal) return 'real';
+  return 'demo';
+}
+
+/** Delete a single invoice and its related records */
+export function deleteInvoice(invoiceId) {
+  execute('DELETE FROM audit_log WHERE invoice_id = ?', [invoiceId]);
+  execute('DELETE FROM recovery_attempts WHERE invoice_id = ?', [invoiceId]);
+  execute('DELETE FROM promises_to_pay WHERE invoice_id = ?', [invoiceId]);
+  execute('DELETE FROM invoices WHERE invoice_id = ?', [invoiceId]);
+}
+
+/** Delete a personal payment record */
+export function deletePersonalPayment(paymentId) {
+  execute('DELETE FROM personal_payments WHERE payment_id = ?', [paymentId]);
 }
 
 // ── Helpers — sql.js returns arrays, we convert to objects ───────────────────
@@ -186,6 +238,16 @@ export function getInvoicesByBatch(batchId) {
 
 export function getActiveInvoicesByBatch(batchId) {
   return queryAll("SELECT * FROM invoices WHERE batch_id = ? AND status = 'active' ORDER BY amount DESC", [batchId]);
+}
+
+/** Return ALL invoices across all batches, ordered by creation/amount */
+export function getAllInvoices() {
+  return queryAll('SELECT * FROM invoices ORDER BY amount DESC');
+}
+
+/** Return all invoices for a given status */
+export function getInvoicesByStatus(status) {
+  return queryAll('SELECT * FROM invoices WHERE status = ? ORDER BY amount DESC', [status]);
 }
 
 export function updateInvoiceStatus(invoiceId, status) {
@@ -260,6 +322,24 @@ export function getLatestBatch() {
   return queryOne('SELECT * FROM batch_runs ORDER BY created_at DESC LIMIT 1');
 }
 
+/**
+ * Get or create a session batch. This eliminates the "Generate Demo Data first" requirement.
+ * The batch is just a container for user-entered data.
+ */
+export function getOrCreateSessionBatch() {
+  const existing = getLatestBatch();
+  if (existing) return existing;
+
+  const batchId = uuidv4();
+  const now = new Date().toISOString();
+  execute(
+    `INSERT INTO batch_runs (batch_id, created_at, total_cases, status, total_at_risk_amount)
+    VALUES (?, ?, 0, 'active', 0)`,
+    [batchId, now]
+  );
+  return getLatestBatch();
+}
+
 export function updateBatchStatus(batchId, status) {
   execute('UPDATE batch_runs SET status = ? WHERE batch_id = ?', [status, batchId]);
 }
@@ -287,7 +367,54 @@ export function updateBatchBaselineResults(batchId, recoveredAmount, recoveredCo
   );
 }
 
-// Bulk insert helpers used by generator
+// ── Failure reason stats from actual data ────────────────────────────────────
+
+export function getFailureReasonStats() {
+  // Group by failure_reason (or category) and compute stats
+  const invoices = getAllInvoices();
+  const statsMap = {};
+
+  for (const inv of invoices) {
+    const reason = inv.failure_reason || inv.category || 'Unknown';
+    if (!statsMap[reason]) {
+      statsMap[reason] = { total: 0, recovered: 0 };
+    }
+    statsMap[reason].total++;
+    if (inv.status === 'recovered') statsMap[reason].recovered++;
+  }
+
+  return Object.entries(statsMap).map(([reason, s]) => ({
+    failure_reason: reason,
+    count: s.total,
+    recovery_rate: s.total > 0 ? s.recovered / s.total : 0
+  }));
+}
+
+// ── Personal Payments ─────────────────────────────────────────────────────────
+
+export function insertPersonalPayment(p) {
+  execute(
+    `INSERT INTO personal_payments (payment_id, user_session, payment_name, amount, due_date, payment_date, payment_type, status, failure_reason, monthly_income, monthly_expenses, created_at, data_source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      p.payment_id || uuidv4(), p.user_session || 'default',
+      p.payment_name, p.amount, p.due_date, p.payment_date || null,
+      p.payment_type, p.status, p.failure_reason || null,
+      p.monthly_income || null, p.monthly_expenses || null,
+      p.created_at || new Date().toISOString(),
+      p.data_source || 'real'
+    ]
+  );
+}
+
+export function getPersonalPayments(userSession = 'default') {
+  return queryAll(
+    'SELECT * FROM personal_payments WHERE user_session = ? ORDER BY created_at DESC',
+    [userSession]
+  );
+}
+
+// ── Bulk insert helpers used by generator ─────────────────────────────────────
 export function insertCustomer(c) {
   execute(
     `INSERT INTO customers (customer_id, company_name, industry, contact_name, email, phone,
@@ -306,12 +433,13 @@ export function insertInvoice(i) {
   execute(
     `INSERT INTO invoices (invoice_id, customer_id, invoice_number, amount, currency,
       issue_date, due_date, days_overdue, status, category, priority, dispute_flag,
-      true_recovery_probability, batch_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      true_recovery_probability, batch_id, failure_reason, payment_method, data_source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       i.invoice_id, i.customer_id, i.invoice_number, i.amount, i.currency,
       i.issue_date, i.due_date, i.days_overdue, i.status, i.category, i.priority, i.dispute_flag,
-      i.true_recovery_probability, i.batch_id
+      i.true_recovery_probability, i.batch_id, i.failure_reason || null, i.payment_method || null,
+      i.data_source || 'real'
     ]
   );
 }

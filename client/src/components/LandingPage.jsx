@@ -34,7 +34,7 @@ export default function LandingPage({ onStartDemo }) {
               onClick={() => onStartDemo('business')}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-semibold text-sm hover:brightness-110 shadow-lg shadow-teal-500/25 transition-all flex items-center gap-2"
             >
-              Try Demo <ArrowRight className="w-4 h-4" />
+              Get Started <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function LandingPage({ onStartDemo }) {
               onClick={() => onStartDemo('business')}
               className="px-8 py-3.5 rounded-xl bg-teal-500 text-slate-950 font-bold text-base hover:bg-teal-400 shadow-xl shadow-teal-500/20 transition-all flex items-center gap-2"
             >
-              Try Demo Now <ArrowRight className="w-5 h-5" />
+              Get Started <ArrowRight className="w-5 h-5" />
             </button>
 
             <a
@@ -70,12 +70,16 @@ export default function LandingPage({ onStartDemo }) {
               See How It Works
             </a>
           </div>
+
+          <p className="text-xs text-slate-500">
+            Start with your own data — or explore with sample data after signing in.
+          </p>
         </div>
 
         {/* Demo Guarantee Banner */}
-        <div className="mt-12 p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-center text-xs text-slate-400 max-w-2xl mx-auto flex items-center justify-center gap-2">
+        <div className="mt-8 p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-center text-xs text-slate-400 max-w-2xl mx-auto flex items-center justify-center gap-2">
           <Lock className="w-4 h-4 text-teal-400 shrink-0" />
-          <span>Demo Environment — Simulated recovery actions & educational guidance. No real payments or messages are sent.</span>
+          <span>Prototype environment — simulated recovery actions &amp; educational guidance. No real payments or messages are sent. Your data stays in-session only.</span>
         </div>
 
         {/* Interactive Visual Workflow graphic */}

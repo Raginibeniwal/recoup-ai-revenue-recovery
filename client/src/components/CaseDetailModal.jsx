@@ -108,11 +108,16 @@ export default function CaseDetailModal({ caseId, onClose, onRefresh }) {
 
         {/* Case Header */}
         <div className="space-y-3 border-b border-slate-800 pb-6 pr-12">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl font-black text-white">{data.customer_name}</h2>
             <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
               {data.invoice_number}
             </span>
+            {data.failure_reason && (
+              <span className="text-xs px-2.5 py-1 rounded bg-amber-900/60 text-amber-300 border border-amber-700/50">
+                {data.failure_reason}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
@@ -120,6 +125,7 @@ export default function CaseDetailModal({ caseId, onClose, onRefresh }) {
             <span>Due Date: <strong className="text-slate-200">{data.due_date}</strong></span>
             <span>Overdue: <strong className="text-amber-400">{data.days_overdue} days</strong></span>
             <span>Status: <strong className="text-teal-400 uppercase">{data.status}</strong></span>
+            {data.payment_method && <span>Method: <strong className="text-slate-200">{data.payment_method}</strong></span>}
           </div>
         </div>
 
@@ -180,18 +186,40 @@ export default function CaseDetailModal({ caseId, onClose, onRefresh }) {
           </div>
         </div>
 
-        {/* "WHY RECOUP RECOMMENDS THIS" Section */}
+        {/* WHY DID THIS PAYMENT FAIL — Human Reasoning Section */}
+        {data.reasoning && (
+          <div className="space-y-2 bg-amber-950/40 p-5 rounded-2xl border border-amber-800/50">
+            <h3 className="font-bold text-amber-200 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              Why This Payment Likely Failed
+            </h3>
+            <p className="text-xs text-amber-100/90 leading-relaxed">{data.reasoning}</p>
+          </div>
+        )}
+
+        {/* RECOMMENDED ACTION */}
+        {data.recommended_action_text && (
+          <div className="space-y-2 bg-teal-950/40 p-5 rounded-2xl border border-teal-800/50">
+            <h3 className="font-bold text-teal-200 text-sm flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-teal-400" />
+              Recommended Recovery Action
+            </h3>
+            <p className="text-xs text-teal-100/90 leading-relaxed font-medium">{data.recommended_action_text}</p>
+          </div>
+        )}
+
+        {/* "WHY RECOUP RECOMMENDS THIS" — AI Decision Factors */}
         <div className="space-y-4 bg-slate-950 p-6 rounded-2xl border border-slate-850">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-white text-base flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-teal-400" />
-              Why Recoup Recommends This
+              AI Recovery Analysis
             </h3>
             <button
               onClick={() => setShowTechDetails(!showTechDetails)}
               className="text-xs text-teal-400 hover:underline flex items-center gap-1 font-mono"
             >
-              {showTechDetails ? 'Hide' : 'Show'} Tech Details {showTechDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              {showTechDetails ? 'Hide' : 'Show'} Decision Factors {showTechDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
 
@@ -206,19 +234,21 @@ export default function CaseDetailModal({ caseId, onClose, onRefresh }) {
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-800 text-xs">
             <div>
-              <span className="text-slate-400">Estimated Recovery Chance:</span>
-              <div className="text-lg font-bold text-teal-400">{(decision?.recoveryProbability * 100).toFixed(0)}%</div>
+              <span className="text-slate-400">Recovery Probability:</span>
+              <div className="text-2xl font-black text-teal-400">{decision ? (decision.recoveryProbability * 100).toFixed(0) : 0}%</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Chance of collecting this invoice</div>
             </div>
             <div>
-              <span className="text-slate-400">Expected Recovery Value (ERV):</span>
-              <div className="text-lg font-bold text-white">₹{decision?.expectedRecoveryValue?.toLocaleString('en-IN')}</div>
+              <span className="text-slate-400">Expected Recoverable Value (ERV):</span>
+              <div className="text-2xl font-black text-white">₹{decision ? Math.round(decision.expectedRecoveryValue).toLocaleString('en-IN') : 0}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Invoice Amount × Recovery Probability</div>
             </div>
           </div>
 
-          {/* Expandable Technical Math Explanation */}
+          {/* Expandable Technical Factors */}
           {showTechDetails && (
             <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300 space-y-2">
-              <div className="font-bold text-teal-400 text-[11px] uppercase tracking-wider">Deterministic Decision Factors:</div>
+              <div className="font-bold text-teal-400 text-[11px] uppercase tracking-wider">AI Decision Factors:</div>
               <ul className="space-y-1 text-[11px] list-disc list-inside text-slate-400">
                 {decision?.decisionFactors?.map((f, i) => (
                   <li key={i}>{f}</li>
@@ -261,28 +291,34 @@ export default function CaseDetailModal({ caseId, onClose, onRefresh }) {
         <div className="space-y-4">
           <h3 className="font-bold text-white text-base flex items-center gap-2">
             <FileText className="w-5 h-5 text-sky-400" />
-            Agent Audit Trail Timeline
+            Activity & Audit Trail
           </h3>
 
-          <div className="relative border-l-2 border-slate-800 ml-3 space-y-6 pb-4">
-            {audit_log.map((log) => (
-              <div key={log.id} className="relative pl-6">
-                <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-slate-800 border-2 border-teal-400" />
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-white uppercase tracking-wider">{log.event.replace(/_/g, ' ')}</span>
-                    <span className="text-[10px] text-slate-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">{log.reasoning}</p>
-                  {log.tool_called && (
-                    <div className="text-[11px] font-mono text-teal-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
-                      Tool: {log.tool_called}
+          {(!audit_log || audit_log.length === 0) ? (
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-500 text-center">
+              No recovery actions recorded yet. Click "Run Recovery" to begin automated recovery for this case.
+            </div>
+          ) : (
+            <div className="relative border-l-2 border-slate-800 ml-3 space-y-6 pb-4">
+              {audit_log.map((log) => (
+                <div key={log.id} className="relative pl-6">
+                  <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-slate-800 border-2 border-teal-400" />
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-white uppercase tracking-wider">{log.event.replace(/_/g, ' ')}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
                     </div>
-                  )}
+                    <p className="text-xs text-slate-300 leading-relaxed">{log.reasoning}</p>
+                    {log.tool_called && (
+                      <div className="text-[11px] font-mono text-teal-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
+                        Tool: {log.tool_called}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
